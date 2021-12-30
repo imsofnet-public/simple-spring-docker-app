@@ -1,19 +1,25 @@
-FROM maven:3.6.0-jdk-11-slim AS build
-
-COPY src src
+FROM maven:3.6.3-openjdk-14-slim AS build
+WORKDIR /build
+# copy just pom.xml (dependencies and dowload them all for offline access later - cache layer)
 COPY pom.xml .
-VOLUME /root/.m2/repository
-RUN mvn -f pom.xml clean package install
+RUN mvn dependency:go-offline -B
+# copy source files and compile them (.dockerignore should handle what to copy)
+COPY . .
+RUN mvn package -DskipTests
 
 
-FROM openjdk:12-jdk-alpine
+# Runnable image
+FROM openjdk:12-alpine as runnable
+VOLUME /tmp
+VOLUME /logs
 
-COPY --from=build /target /opt/target
 
-WORKDIR /target
+ARG JAR_FOLDER=/build/target
 
-ADD ./task.jar task.jar
+# Copy the jar file
+COPY --from=build ${JAR_FOLDER}/task.jar task.jar
 
 EXPOSE 8080
 
+# Run application
 ENTRYPOINT ["java", "-jar", "/task.jar"]
